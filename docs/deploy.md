@@ -12,8 +12,11 @@ Next.js).
      acrescente `?pgbouncer=true&connection_limit=1` (são parâmetros do motor de consultas antigo do
      Prisma; o adaptador `@prisma/adapter-pg` usado aqui os ignora). O tamanho do pool por instância
      é controlado por `DATABASE_POOL_MAX` (padrão 5, ver `src/server/db.ts`).
-   - **SSL**: o Supabase aceita (e recomenda) conexões com SSL. Se a URL copiada não trouxer
-     `?sslmode=require`, acrescente-o para garantir que a conexão seja criptografada.
+   - **SSL**: termine a URL da aplicação com `?uselibpqcompat=true&sslmode=require`. Só
+     `sslmode=require` **não** funciona: o driver `pg` (v8) o trata como `verify-full`, e a cadeia do
+     certificado do Supabase não é reconhecida pelo Node → `SELF_SIGNED_CERT_IN_CHAIN` e erro 500 em
+     toda página que consulta o banco. Com `uselibpqcompat=true` a conexão continua criptografada,
+     sem validar o certificado (semântica do libpq).
    - **Direct connection / Session** (porta 5432) — usada só para rodar as migrações a partir da
      sua máquina (o pooler em modo transação não suporta os comandos que `prisma migrate deploy`
      precisa):
@@ -34,7 +37,7 @@ Next.js).
 
    | Variável | Valor |
    | --- | --- |
-   | `DATABASE_URL` | a URL do **Transaction pooler** do Supabase (Supavisor), sem outros parâmetros além de `sslmode=require` — configure para **Production e Preview** (ver observações) |
+   | `DATABASE_URL` | a URL do **Transaction pooler** do Supabase (Supavisor), terminando em `?uselibpqcompat=true&sslmode=require` (ver SSL acima) — configure para **Production e Preview** (ver observações) |
    | `DATABASE_POOL_MAX` | opcional; conexões por instância no pool (padrão `5`) |
    | `APP_URL` | `https://<seu-domínio>` (o domínio que o Vercel atribuiu, ou o domínio próprio — ver abaixo). Obrigatória em produção: sem ela, as páginas que geram links absolutos falham com erro explícito |
    | `STORAGE_DRIVER` | `supabase` (em produção o driver `local` é recusado com erro explícito) |
