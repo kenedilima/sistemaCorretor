@@ -2,7 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { StorageProvider } from "./index";
 
 export class SupabaseStorage implements StorageProvider {
-  private readonly bucket = process.env.SUPABASE_BUCKET ?? "property-images";
+  // `||`, não `??`: variável cadastrada vazia no Vercel chega como "" e viraria "Bucket not found"
+  private readonly bucket = process.env.SUPABASE_BUCKET?.trim() || "property-images";
   private readonly client = (() => {
     const url = process.env.SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
