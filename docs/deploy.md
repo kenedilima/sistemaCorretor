@@ -27,6 +27,9 @@ Next.js).
    "Public bucket"). É nele que ficam as fotos dos imóveis e as fotos de perfil.
 4. **Project Settings → API**: copie a **service role key** (não a `anon key` — o backend precisa
    de permissão de escrita no bucket) e a **Project URL**.
+   - Use a chave **legada** (formato JWT, começa com `eyJ`), na seção "Legacy API keys". A chave
+     nova (`sb_secret_...`) quebra o upload de fotos: `@supabase/supabase-js` 2.x tenta decodificá-la
+     como JWT e falha com `Invalid Compact JWS` — confirmado testando as duas contra o bucket real.
 
 ## 2. Vercel
 
