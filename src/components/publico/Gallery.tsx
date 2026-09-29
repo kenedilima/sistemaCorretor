@@ -1,5 +1,5 @@
 "use client";
-import { Images, X } from "lucide-react";
+import { ImageOff, Images, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/components/ui/cn";
 
@@ -36,7 +36,12 @@ export function Gallery({ images, title }: { images: GalleryImage[]; title: stri
   }, [openAt]);
 
   if (total === 0) {
-    return <div className="aspect-[4/3] w-full bg-surface-sunken lg:aspect-[21/9] lg:rounded-panel" aria-hidden />;
+    return (
+      <div className="flex aspect-[16/9] w-full flex-col items-center justify-center gap-2 bg-surface-sunken text-ink-muted lg:aspect-[21/7] lg:rounded-panel">
+        <ImageOff aria-hidden className="size-7 text-ink-faint" strokeWidth={1.5} />
+        <p className="text-[0.9375rem]">As fotos deste imóvel ainda não foram publicadas</p>
+      </div>
+    );
   }
 
   const thumbs = images.slice(1, total >= 5 ? 5 : total >= 3 ? 3 : 2);

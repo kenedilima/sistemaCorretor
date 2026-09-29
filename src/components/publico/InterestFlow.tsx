@@ -8,6 +8,7 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
+import { AgentAvatar } from "./AgentCard";
 import { isAnswered, visibleQuestions } from "@/domain/questionnaire";
 import type { AnswerMap, AnswerValue } from "@/domain/types";
 import { captureAttribution, sendEventOncePerSession } from "@/lib/tracking";
@@ -18,6 +19,7 @@ type Step = { kind: "loading" } | { kind: "question"; index: number } | { kind: 
 
 export type InterestFlowProps = {
   property: { id: string; title: string; slug: string; coverUrl: string | null };
+  agent: { name: string; photoUrl: string | null };
   questions: PublicQuestion[];
 };
 
@@ -27,7 +29,7 @@ const numberFmt = new Intl.NumberFormat("pt-BR");
  * Questionário do visitante: uma pergunta por tela → encaminhamento ao WhatsApp. O lead já foi criado
  * no formulário da página do imóvel (InterestStart) e chega aqui pelo sessionStorage.
  */
-export function InterestFlow({ property, questions }: InterestFlowProps) {
+export function InterestFlow({ property, agent, questions }: InterestFlowProps) {
   const router = useRouter();
   const propertyHref = `/imovel/${property.slug}`;
   const [step, setStep] = useState<Step>({ kind: "loading" });
@@ -196,7 +198,7 @@ export function InterestFlow({ property, questions }: InterestFlowProps) {
     : step.kind === "sending" ? "Enviando respostas"
     : "Tudo pronto";
 
-  const headingClass = "font-display text-[1.875rem] leading-[1.15] tracking-[-0.015em] text-balance text-ink outline-none";
+  const headingClass = "font-display text-[1.875rem] lg:text-[2.375rem] leading-[1.15] tracking-[-0.015em] text-balance text-ink outline-none";
 
   let body: ReactNode;
   if (step.kind === "loading") {
@@ -366,15 +368,21 @@ export function InterestFlow({ property, questions }: InterestFlowProps) {
   } else {
     const { handoff } = step;
     const firstName = name.trim().split(/\s+/)[0];
+    const agentFirstName = agent.name.trim().split(/\s+/)[0];
     body = (
       <>
-        <span aria-hidden className="grid size-14 place-items-center rounded-full bg-whatsapp/10 text-whatsapp">
-          <Check className="size-7" strokeWidth={2.5} />
+        <span aria-hidden className="relative self-start">
+          <AgentAvatar agent={agent} className="size-16 text-xl" />
+          <span className="absolute -right-1 -bottom-1 grid size-7 place-items-center rounded-full bg-whatsapp text-white ring-3 ring-surface">
+            <Check className="size-4" strokeWidth={3} />
+          </span>
         </span>
         <h1 ref={headingRef} tabIndex={-1} className={cn(headingClass, "mt-5")}>
           {firstName ? `Pronto, ${firstName}!` : "Pronto!"}
         </h1>
-        <p className="mt-2 text-base text-ink-muted">Sua mensagem já vai pronta — é só enviar.</p>
+        <p className="mt-2 text-base leading-relaxed text-ink-muted">
+          A mensagem para {agentFirstName} já vai escrita com suas respostas. É só abrir o WhatsApp e enviar.
+        </p>
 
         <a
           href={handoff.whatsappUrl}
@@ -388,7 +396,7 @@ export function InterestFlow({ property, questions }: InterestFlowProps) {
               fetch(url, { method: "POST", body: payload, keepalive: true }).catch(() => {});
             }
           }}
-          className="mt-7 inline-flex h-14 w-full items-center justify-center gap-2.5 rounded-control bg-whatsapp px-5 text-base font-semibold text-white hover:bg-whatsapp-strong active:bg-whatsapp-strong"
+          className="mt-7 inline-flex h-14 w-full items-center justify-center gap-2.5 rounded-control bg-whatsapp px-5 text-base font-semibold text-white shadow-[0_8px_20px_-8px_rgb(23_138_69/0.6)] hover:bg-whatsapp-strong active:bg-whatsapp-strong"
         >
           <MessageCircle aria-hidden className="size-5" />
           Continuar no WhatsApp
@@ -397,7 +405,7 @@ export function InterestFlow({ property, questions }: InterestFlowProps) {
         {handoff.lines.length > 0 && (
           <section aria-labelledby="resumo" className="mt-9">
             <h2 id="resumo" className="text-sm font-medium text-ink-muted">
-              O corretor vai receber
+              {agentFirstName} vai receber
             </h2>
             <dl className="mt-2 divide-y divide-line border-y border-line">
               {handoff.lines.map((l) => (
@@ -426,47 +434,74 @@ export function InterestFlow({ property, questions }: InterestFlowProps) {
   const canGoBack = (step.kind === "question" && step.index > 0) || (step.kind === "sending" && error !== null);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface">
-      <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-lg items-center gap-3 px-2 py-2 sm:px-4">
-          {step.kind === "loading" || (step.kind === "question" && step.index === 0) ? (
-            <Link href={propertyHref} aria-label="Voltar ao imóvel" className={backButtonClass}>
-              <ArrowLeft aria-hidden className="size-5" />
-            </Link>
-          ) : canGoBack ? (
-            <button type="button" onClick={back} aria-label="Voltar à etapa anterior" className={backButtonClass}>
-              <ArrowLeft aria-hidden className="size-5" />
-            </button>
-          ) : (
-            <span aria-hidden className="w-2" />
-          )}
-          {property.coverUrl && (
-            // eslint-disable-next-line @next/next/no-img-element -- foto do storage (local ou Supabase)
-            <img src={property.coverUrl} alt="" className="size-10 shrink-0 rounded-[0.5rem] object-cover" />
-          )}
-          <div className="min-w-0 flex-1 leading-tight">
-            <p className="truncate text-[0.9375rem] font-medium text-ink">{property.title}</p>
-            <p className="text-[0.8125rem] text-ink-muted">{stepLabel}</p>
+    <div className="bg-surface lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="flex min-h-dvh flex-col bg-surface">
+        <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur-md">
+          <div className="mx-auto flex max-w-lg items-center gap-3 px-2 py-2 sm:px-4">
+            {step.kind === "loading" || (step.kind === "question" && step.index === 0) ? (
+              <Link href={propertyHref} aria-label="Voltar ao imóvel" className={backButtonClass}>
+                <ArrowLeft aria-hidden className="size-5" />
+              </Link>
+            ) : canGoBack ? (
+              <button type="button" onClick={back} aria-label="Voltar à etapa anterior" className={backButtonClass}>
+                <ArrowLeft aria-hidden className="size-5" />
+              </button>
+            ) : (
+              <span aria-hidden className="w-2" />
+            )}
+            {property.coverUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- foto do storage (local ou Supabase)
+              <img src={property.coverUrl} alt="" className="size-10 shrink-0 rounded-[0.5rem] object-cover lg:hidden" />
+            )}
+            <div className="min-w-0 flex-1 leading-tight">
+              <p className="truncate text-[0.9375rem] font-medium text-ink">{property.title}</p>
+              <p className="text-[0.8125rem] text-ink-muted">{stepLabel}</p>
+            </div>
           </div>
-        </div>
-        <div
-          role="progressbar"
-          aria-label="Progresso"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progress * 100)}
-          className="h-1 bg-line/60"
-        >
-          <div className="h-full bg-brand transition-[width] duration-300 ease-out" style={{ width: `${progress * 100}%` }} />
-        </div>
-      </header>
+          <div
+            role="progressbar"
+            aria-label="Progresso"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
+            className="h-1 bg-line/60"
+          >
+            <div className="h-full bg-brand transition-[width] duration-300 ease-out" style={{ width: `${progress * 100}%` }} />
+          </div>
+        </header>
 
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col px-4 pt-7 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-10">
-        <div key={stepKey} className="flex flex-1 flex-col motion-safe:animate-[step-in_220ms_ease-out]">
-          {body}
-        </div>
-      </main>
+        <main className="mx-auto flex w-full max-w-lg flex-1 flex-col px-4 pt-7 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-10 lg:pt-16">
+          <div key={stepKey} className="flex flex-1 flex-col motion-safe:animate-[step-in_220ms_ease-out]">
+            {body}
+          </div>
+        </main>
+      </div>
+      <SidePhoto coverUrl={property.coverUrl} title={property.title} agent={agent} />
     </div>
+  );
+}
+
+/**
+ * Desktop: a foto real do imóvel ocupa a metade direita durante as perguntas, lembrando o que o
+ * visitante está pedindo. Sem foto, o espaço mostra o corretor que vai receber as respostas.
+ */
+function SidePhoto({ coverUrl, title, agent }: { coverUrl: string | null; title: string; agent: InterestFlowProps["agent"] }) {
+  return (
+    <aside aria-hidden className="sticky top-0 hidden h-dvh p-3 pl-0 lg:block">
+      <div className="relative size-full overflow-hidden rounded-panel bg-brand">
+        {coverUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- foto do storage (local ou Supabase)
+          <img src={coverUrl} alt="" className="size-full object-cover" />
+        ) : (
+          <div className="flex size-full items-center justify-center">
+            <AgentAvatar agent={agent} ring className="size-28 text-3xl" />
+          </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/80 to-transparent p-8 pt-24">
+          <p className="max-w-md font-display text-[1.75rem] leading-tight text-balance text-white">{title}</p>
+        </div>
+      </div>
+    </aside>
   );
 }
 

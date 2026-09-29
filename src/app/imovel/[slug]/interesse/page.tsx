@@ -25,6 +25,7 @@ export default async function InterestPage({ params }: PageProps<"/imovel/[slug]
         slug: p.slug,
         coverUrl: p.images[0]?.url ?? null,
       }}
+      agent={{ name: p.agent.name, photoUrl: p.agent.photoUrl }}
       questions={questions}
     />
   );

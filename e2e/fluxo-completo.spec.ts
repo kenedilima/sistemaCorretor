@@ -42,7 +42,9 @@ test("corretor publica imóvel e recebe lead qualificado", async ({ page, browse
   await expect(v.getByRole("heading", { name: "Casa no Jardim dos Estados" })).toBeVisible();
   // o nome é pedido no próprio card do imóvel (único campo obrigatório) e o botão leva direto às perguntas
   const start = v.getByRole("button", { name: /tenho interesse neste imóvel/i });
-  await expect(start).toBeDisabled();
+  // sem nome, o botão continua ativo e aponta o campo que falta
+  await start.click();
+  await expect(v.getByText("Informe seu nome")).toBeVisible();
   await v.getByLabel("Seu nome").fill("João Pereira");
   await start.click();
   // Cada opção avança sozinha (150ms) para a próxima pergunta; esperamos o título de cada uma

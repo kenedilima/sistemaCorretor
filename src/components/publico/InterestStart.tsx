@@ -1,13 +1,12 @@
 "use client";
-import { ChevronDown } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
-import { cn } from "@/components/ui/cn";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
 import { getAttribution, getVisitorId } from "@/lib/tracking";
-import { hasName, maskPhone, postJson, validateContact, writeDone, writeStored, type Lead } from "./lead-session";
+import { maskPhone, postJson, validateContact, writeDone, writeStored, type Lead } from "./lead-session";
 
 export const INTEREST_NAME_ID = "interest-name";
 const FIELD_IDS: Record<string, string> = { name: INTEREST_NAME_ID, phone: "interest-phone", email: "interest-email" };
@@ -80,63 +79,66 @@ export function InterestStart({ propertyId, slug, consentText }: { propertyId: s
           autoCapitalize="words"
           enterKeyHint="go"
           maxLength={100}
+          placeholder="Como o corretor pode te chamar"
           invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? `${FIELD_IDS.name}-error` : undefined}
           value={contact.name}
-          onChange={(e) => setContact({ ...contact, name: e.target.value })}
-          className="h-12! border-white! text-base!"
+          onChange={(e) => {
+            setContact({ ...contact, name: e.target.value });
+            if (errors.name) setErrors((errs) => ({ ...errs, name: "" }));
+          }}
+          className="h-13! border-white! text-base!"
         />
       </OnBrandField>
 
-      <div className="rounded-control border border-white/30">
+      {showMore ? (
+        <div id="interest-more" className="flex flex-col gap-4">
+          <OnBrandField id={FIELD_IDS.phone} label="WhatsApp (opcional)" error={errors.phone}>
+            <Input
+              id={FIELD_IDS.phone}
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              enterKeyHint="next"
+              placeholder="(67) 99999-1234"
+              invalid={Boolean(errors.phone)}
+              aria-describedby={errors.phone ? `${FIELD_IDS.phone}-error` : undefined}
+              value={contact.phone}
+              onChange={(e) => setContact({ ...contact, phone: maskPhone(e.target.value) })}
+              className="h-12! border-white! text-base! tabular-nums"
+            />
+          </OnBrandField>
+          <OnBrandField id={FIELD_IDS.email} label="E-mail (opcional)" error={errors.email}>
+            <Input
+              id={FIELD_IDS.email}
+              name="email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="none"
+              enterKeyHint="go"
+              maxLength={200}
+              invalid={Boolean(errors.email)}
+              aria-describedby={errors.email ? `${FIELD_IDS.email}-error` : undefined}
+              value={contact.email}
+              onChange={(e) => setContact({ ...contact, email: e.target.value })}
+              className="h-12! border-white! text-base!"
+            />
+          </OnBrandField>
+        </div>
+      ) : (
         <button
           type="button"
-          aria-expanded={showMore}
+          aria-expanded={false}
           aria-controls="interest-more"
-          onClick={() => setShowMore((v) => !v)}
-          className="flex min-h-12 w-full items-center justify-between gap-3 rounded-control px-4 py-3 text-left text-[0.9375rem] font-medium text-white hover:bg-white/10"
+          onClick={() => setShowMore(true)}
+          className="-my-1 inline-flex min-h-11 items-center gap-1.5 self-start text-[0.9375rem] font-medium text-white/90 underline decoration-white/40 underline-offset-4 hover:text-white hover:decoration-white"
         >
-          Quero deixar mais informações de contato
-          <ChevronDown aria-hidden className={cn("size-5 shrink-0 text-white/80 transition-transform duration-150", showMore && "rotate-180")} />
+          <Plus aria-hidden className="size-4" />
+          Deixar também WhatsApp ou e-mail
         </button>
-        {showMore && (
-          <div id="interest-more" className="flex flex-col gap-4 border-t border-white/30 px-4 pt-4 pb-5">
-            <OnBrandField id={FIELD_IDS.phone} label="WhatsApp (opcional)" error={errors.phone}>
-              <Input
-                id={FIELD_IDS.phone}
-                name="phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                enterKeyHint="next"
-                placeholder="(67) 99999-1234"
-                invalid={Boolean(errors.phone)}
-                aria-describedby={errors.phone ? `${FIELD_IDS.phone}-error` : undefined}
-                value={contact.phone}
-                onChange={(e) => setContact({ ...contact, phone: maskPhone(e.target.value) })}
-                className="h-12! border-white! text-base! tabular-nums"
-              />
-            </OnBrandField>
-            <OnBrandField id={FIELD_IDS.email} label="E-mail (opcional)" error={errors.email}>
-              <Input
-                id={FIELD_IDS.email}
-                name="email"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                autoCapitalize="none"
-                enterKeyHint="go"
-                maxLength={200}
-                invalid={Boolean(errors.email)}
-                aria-describedby={errors.email ? `${FIELD_IDS.email}-error` : undefined}
-                value={contact.email}
-                onChange={(e) => setContact({ ...contact, email: e.target.value })}
-                className="h-12! border-white! text-base!"
-              />
-            </OnBrandField>
-          </div>
-        )}
-      </div>
+      )}
 
       <div aria-live="polite">
         {formError && <p className="rounded-control bg-danger-soft px-4 py-3 text-[0.9375rem] text-danger">{formError}</p>}
@@ -144,14 +146,14 @@ export function InterestStart({ propertyId, slug, consentText }: { propertyId: s
 
       <button
         type="submit"
-        disabled={busy || !hasName(contact.name)}
+        disabled={busy}
         aria-busy={busy || undefined}
-        className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-control bg-white px-5 text-base font-semibold text-brand hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-control bg-white px-5 text-base font-semibold text-brand shadow-[0_1px_0_rgb(0_0_0/0.08)] transition-colors hover:bg-brand-soft disabled:cursor-wait"
       >
         {busy && <Spinner label="Enviando" />}
         {busy ? "Enviando…" : "Tenho interesse neste imóvel"}
       </button>
-      <p className="text-[0.8125rem] leading-snug text-white/80">
+      <p className="text-[0.8125rem] leading-snug text-white/75">
         {consentText}{" "}
         <a href="/privacidade" target="_blank" rel="noopener" className="font-medium text-white underline underline-offset-4">
           Ler a política

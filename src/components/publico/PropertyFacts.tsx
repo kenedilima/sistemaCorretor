@@ -1,5 +1,3 @@
-import { Bath, BedDouble, BedSingle, Car, LandPlot, Ruler, type LucideIcon } from "lucide-react";
-
 export type PropertyFactsProps = {
   bedrooms: number | null;
   suites: number | null;
@@ -12,28 +10,34 @@ export type PropertyFactsProps = {
 const area = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
-/** Características principais com ícones; campos vazios não aparecem. */
+/**
+ * Ficha do imóvel: números grandes em serifa, lidos de relance como numa ficha de corretor.
+ * Campos vazios não aparecem. A área vem primeiro porque é o dado que mais filtra a decisão.
+ */
 export function PropertyFacts(p: PropertyFactsProps) {
-  const facts: { icon: LucideIcon; value: string; label: string }[] = [];
-  if (p.bedrooms != null) facts.push({ icon: BedDouble, value: String(p.bedrooms), label: plural(p.bedrooms, "quarto", "quartos") });
-  if (p.suites != null && p.suites > 0) facts.push({ icon: BedSingle, value: String(p.suites), label: plural(p.suites, "suíte", "suítes") });
-  if (p.bathrooms != null) facts.push({ icon: Bath, value: String(p.bathrooms), label: plural(p.bathrooms, "banheiro", "banheiros") });
-  if (p.parkingSpots != null) facts.push({ icon: Car, value: String(p.parkingSpots), label: plural(p.parkingSpots, "vaga", "vagas") });
-  if (p.builtArea != null) facts.push({ icon: Ruler, value: `${area.format(p.builtArea)} m²`, label: "área construída" });
-  if (p.landArea != null) facts.push({ icon: LandPlot, value: `${area.format(p.landArea)} m²`, label: "terreno" });
+  const facts: { value: string; unit?: string; label: string }[] = [];
+  if (p.builtArea != null) facts.push({ value: area.format(p.builtArea), unit: "m²", label: "área construída" });
+  if (p.bedrooms != null) facts.push({ value: String(p.bedrooms), label: plural(p.bedrooms, "quarto", "quartos") });
+  if (p.suites != null && p.suites > 0) facts.push({ value: String(p.suites), label: plural(p.suites, "suíte", "suítes") });
+  if (p.bathrooms != null) facts.push({ value: String(p.bathrooms), label: plural(p.bathrooms, "banheiro", "banheiros") });
+  if (p.parkingSpots != null) facts.push({ value: String(p.parkingSpots), label: plural(p.parkingSpots, "vaga", "vagas") });
+  if (p.landArea != null) facts.push({ value: area.format(p.landArea), unit: "m²", label: "terreno" });
   if (facts.length === 0) return null;
 
   return (
-    <ul className="grid grid-cols-2 gap-x-6 sm:grid-cols-3" aria-label="Características">
-      {facts.map(({ icon: Icon, value, label }) => (
-        <li key={label} className="flex items-center gap-3 border-t border-line py-3.5">
-          <Icon aria-hidden className="size-5 shrink-0 text-brand" strokeWidth={1.6} />
-          <span className="flex min-w-0 flex-col">
-            <span className="text-[1.0625rem] leading-tight font-semibold text-ink tabular-nums">{value}</span>
-            <span className="text-sm leading-tight text-ink-muted">{label}</span>
-          </span>
-        </li>
+    <dl
+      aria-label="Características"
+      className="grid grid-cols-3 gap-y-5 border-y border-line py-5 sm:flex sm:flex-wrap sm:gap-y-5 sm:divide-x sm:divide-line"
+    >
+      {facts.map(({ value, unit, label }) => (
+        <div key={label} className="flex flex-col-reverse gap-1 pr-3 sm:px-6 sm:first:pl-0 sm:last:pr-0">
+          <dt className="text-sm leading-tight text-ink-muted">{label}</dt>
+          <dd className="font-display text-[1.75rem] leading-none tracking-[-0.02em] text-ink tabular-nums sm:text-[2rem]">
+            {value}
+            {unit && <span className="ml-1 font-sans text-base tracking-normal text-ink-muted">{unit}</span>}
+          </dd>
+        </div>
       ))}
-    </ul>
+    </dl>
   );
 }

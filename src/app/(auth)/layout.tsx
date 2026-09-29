@@ -26,10 +26,24 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <h2 className="font-display text-[3.25rem] leading-[1.02] font-normal tracking-[-0.02em] text-balance">
             Transforme cliques em contatos qualificados.
           </h2>
-          <p className="mt-6 max-w-[26rem] text-[1.0625rem] leading-relaxed text-white/80">
-            Cada imóvel ganha uma página própria. Antes de chamar você no WhatsApp, o interessado responde a poucas
-            perguntas — e você sabe com quem conversar primeiro.
-          </p>
+          <ol className="mt-10 flex flex-col gap-4 border-l border-white/20 pl-6">
+            {[
+              ["Publique o imóvel", "Fotos, preço e características numa página com o seu nome."],
+              ["O interessado responde", "Poucas perguntas sobre prazo, pagamento e visita."],
+              ["Chega no seu WhatsApp", "Já com as respostas: você sabe com quem conversar primeiro."],
+            ].map(([title, text], i) => (
+              <li key={title} className="relative">
+                <span
+                  aria-hidden
+                  className="absolute top-0 -left-[2.3rem] grid size-5 place-items-center rounded-full bg-white text-xs font-semibold text-brand tabular-nums"
+                >
+                  {i + 1}
+                </span>
+                <p className="font-medium">{title}</p>
+                <p className="text-[0.9375rem] text-white/80">{text}</p>
+              </li>
+            ))}
+          </ol>
         </div>
 
         <figure className="relative mt-12 w-full max-w-[26rem] self-end">
