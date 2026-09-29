@@ -398,7 +398,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
             error={contactErrors.consent}
           />
           <ErrorBox error={error} />
-          <div className="mt-auto pt-2">
+          <div className={actionBarClass}>
             <PrimaryButton type="submit" disabled={busy} aria-busy={busy || undefined}>
               {busy ? <Spinner label="Enviando" /> : null}
               {busy ? "Enviando…" : "Continuar"}
@@ -522,7 +522,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
             {isChoice && qError && <p className="mt-3 text-sm text-danger">{qError}</p>}
             <ErrorBox error={qError ? { message: qError } : null} srOnly />
 
-            <div className="mt-auto flex flex-col gap-2 pt-8">
+            <div className={cn(actionBarClass, "mt-4 flex flex-col gap-2")}>
               {(multi || !isChoice) && <PrimaryButton onClick={onContinue}>Continuar</PrimaryButton>}
               {!q.required && (
                 <button
@@ -547,7 +547,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
         <div className="mt-4">
           <ErrorBox error={error} />
         </div>
-        <div className="mt-auto flex flex-col gap-2 pt-8">
+        <div className="flex flex-col gap-2 pt-8">
           <button
             type="button"
             onClick={back}
@@ -612,7 +612,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
           </section>
         )}
 
-        <div className="mt-auto pt-8">
+        <div className="pt-8">
           <Link
             href={`/imovel/${property.slug}`}
             onClick={() => writeDone(property.id, null)}
@@ -671,6 +671,14 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     </div>
   );
 }
+
+/**
+ * Ações logo abaixo do conteúdo (sem `mt-auto`: em telas altas isso jogava o botão para o rodapé,
+ * deixando um vão enorme). Quando o conteúdo passa da tela — teclado aberto, muitas opções —
+ * a barra gruda no rodapé e o botão continua ao alcance do polegar.
+ */
+const actionBarClass =
+  "sticky bottom-0 z-10 -mx-4 bg-surface px-4 pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:-mx-6 sm:px-6";
 
 const backButtonClass =
   "inline-flex size-12 shrink-0 items-center justify-center rounded-full text-ink hover:bg-ink/5";
