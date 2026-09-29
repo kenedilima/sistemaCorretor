@@ -74,7 +74,8 @@ export default async function LeadPage({ params }: PageProps<"/painel/leads/[id]
                   <ClassificationBadge value={lead.classification} />
                   {score !== null && (
                     <span className="text-sm text-ink-muted tabular-nums">
-                      {score}/100 <span className="text-ink-faint">({lead.score} de {lead.maxScore} pts)</span>
+                      {score}/100
+                      {lead.maxScore !== 100 && <span className="text-ink-faint"> ({lead.score} de {lead.maxScore} pts)</span>}
                     </span>
                   )}
                 </>
