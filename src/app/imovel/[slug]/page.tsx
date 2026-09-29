@@ -5,10 +5,12 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { AgentCard } from "@/components/publico/AgentCard";
 import { Gallery } from "@/components/publico/Gallery";
+import { InterestStart } from "@/components/publico/InterestStart";
 import { PropertyFacts } from "@/components/publico/PropertyFacts";
 import { StickyCta } from "@/components/publico/StickyCta";
 import { TrackPageView } from "@/components/publico/TrackPageView";
 import { cn } from "@/components/ui/cn";
+import { CONSENT_TEXT } from "@/domain/consent";
 import { formatBRL } from "@/domain/format";
 import { PROPERTY_TYPE_LABELS } from "@/domain/labels";
 import { getAppUrl } from "@/lib/app-url";
@@ -55,7 +57,6 @@ export default async function PropertyPage({ params }: PageProps<"/imovel/[slug]
   /** Sem WhatsApp do corretor não há para onde encaminhar o visitante: esconde o CTA e avisa. */
   const contactable = available && Boolean(p.agent.whatsapp);
   const isRent = p.purpose === "RENT";
-  const interestHref = `/imovel/${p.slug}/interesse`;
   const price = formatBRL(p.price);
   const priceNote = isRent ? "por mês" : null;
   const location = [p.showAddress && p.address ? p.address : null, p.neighborhood, p.city].filter(Boolean).join(", ");
@@ -191,20 +192,21 @@ export default async function PropertyPage({ params }: PageProps<"/imovel/[slug]
             </section>
           )}
           {contactable && (
-            <section aria-labelledby="interesse" className="flex flex-col gap-5 rounded-panel bg-brand p-6 text-white shadow-raised">
+            <section
+              id="comecar"
+              aria-labelledby="interesse"
+              className="flex scroll-mt-6 flex-col gap-5 rounded-panel bg-brand p-6 text-white shadow-raised"
+            >
               <div className="hidden lg:block">{priceBlock("onBrand")}</div>
-              <h2 id="interesse" className="sr-only">
-                Tenho interesse
-              </h2>
-              <Link
-                href={interestHref}
-                className="inline-flex h-14 w-full items-center justify-center rounded-control bg-white px-5 text-base font-semibold text-brand hover:bg-brand-soft"
-              >
-                Tenho interesse neste imóvel
-              </Link>
-              <p className="text-[0.9375rem] leading-relaxed text-white/85">
-                Leva menos de 1 minuto. O corretor recebe suas respostas e fala com você no WhatsApp.
-              </p>
+              <div className="flex flex-col gap-1">
+                <h2 id="interesse" className="text-lg font-semibold text-white">
+                  Tenho interesse
+                </h2>
+                <p className="text-[0.9375rem] leading-relaxed text-white/85">
+                  Leva menos de 1 minuto. O corretor recebe suas respostas e fala com você no WhatsApp.
+                </p>
+              </div>
+              <InterestStart propertyId={p.id} slug={p.slug} consentText={CONSENT_TEXT} />
             </section>
           )}
           {!available && <div className="hidden lg:block">{priceBlock("ink")}</div>}
@@ -229,7 +231,7 @@ export default async function PropertyPage({ params }: PageProps<"/imovel/[slug]
         </div>
       </footer>
 
-      {contactable && <StickyCta href={interestHref} price={price} priceSuffix={isRent ? "por mês" : undefined} />}
+      {contactable && <StickyCta price={price} priceSuffix={isRent ? "por mês" : undefined} />}
     </div>
   );
 }

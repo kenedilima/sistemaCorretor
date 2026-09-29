@@ -40,11 +40,10 @@ test("corretor publica imóvel e recebe lead qualificado", async ({ page, browse
   const v = await visitor.newPage();
   await v.goto(`/imovel/casa-no-jardim-dos-estados?utm_source=instagram&utm_campaign=teste`);
   await expect(v.getByRole("heading", { name: "Casa no Jardim dos Estados" })).toBeVisible();
-  await v.getByRole("link", { name: /tenho interesse/i }).first().click();
-  // só o nome é obrigatório: o botão fica desabilitado até preenchê-lo
-  const start = v.getByRole("button", { name: /começar/i });
+  // o nome é pedido no próprio card do imóvel (único campo obrigatório) e o botão leva direto às perguntas
+  const start = v.getByRole("button", { name: /tenho interesse neste imóvel/i });
   await expect(start).toBeDisabled();
-  await v.getByLabel("Nome").fill("João Pereira");
+  await v.getByLabel("Seu nome").fill("João Pereira");
   await start.click();
   // Cada opção avança sozinha (150ms) para a próxima pergunta; esperamos o título de cada uma
   // aparecer antes de clicar, senão dois cliques em sequência podem acertar o mesmo botão "Sim"

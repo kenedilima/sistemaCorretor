@@ -1,8 +1,8 @@
 "use client";
-import { ArrowLeft, Check, ChevronDown, MessageCircle, RotateCcw } from "lucide-react";
+import { ArrowLeft, Check, MessageCircle, RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
-import { flushSync } from "react-dom";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/components/ui/cn";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -10,141 +10,42 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { isAnswered, visibleQuestions } from "@/domain/questionnaire";
 import type { AnswerMap, AnswerValue } from "@/domain/types";
-import { captureAttribution, getAttribution, getVisitorId, sendEventOncePerSession } from "@/lib/tracking";
+import { captureAttribution, sendEventOncePerSession } from "@/lib/tracking";
 import type { Handoff, PublicQuestion } from "@/server/services/public-leads";
+import { postJson, readDone, readStored, writeDone, writeStored, type Lead } from "./lead-session";
 
-type Step = { kind: "contact" } | { kind: "question"; index: number } | { kind: "sending" } | { kind: "done"; handoff: Handoff };
-type Lead = { leadId: string; token: string };
-type Stored = Lead & { name: string; answers: AnswerMap };
-/** Marcador da etapa final: recarregar a tela de conclusão volta a ela em vez de abrir o formulário vazio. */
-type StoredDone = Lead & { name: string; handoff: Handoff };
+type Step = { kind: "loading" } | { kind: "question"; index: number } | { kind: "sending" } | { kind: "done"; handoff: Handoff };
 
 export type InterestFlowProps = {
-  property: { id: string; title: string; slug: string; coverUrl: string | null; agentName: string; agentPhotoUrl: string | null };
+  property: { id: string; title: string; slug: string; coverUrl: string | null };
   questions: PublicQuestion[];
-  consentText: string;
 };
 
-const GENERIC_ERROR = "Algo deu errado. Tente novamente.";
-const OFFLINE_ERROR = "Sem conexão. Verifique sua internet e tente novamente.";
 const numberFmt = new Intl.NumberFormat("pt-BR");
 
-const storageKey = (propertyId: string) => `sc_lead_${propertyId}`;
-const doneKey = (propertyId: string) => `sc_done_${propertyId}`;
-
-function readDone(propertyId: string): StoredDone | null {
-  try {
-    const v = JSON.parse(sessionStorage.getItem(doneKey(propertyId)) ?? "null");
-    const h = v?.handoff;
-    if (typeof v?.leadId !== "string" || typeof v?.token !== "string" || typeof h?.whatsappUrl !== "string") return null;
-    if (!h.whatsappUrl.startsWith("https://wa.me/") || !Array.isArray(h.lines)) return null;
-    return { leadId: v.leadId, token: v.token, name: typeof v.name === "string" ? v.name : "", handoff: h as Handoff };
-  } catch {
-    return null;
-  }
-}
-
-function writeDone(propertyId: string, value: StoredDone | null) {
-  try {
-    if (value) sessionStorage.setItem(doneKey(propertyId), JSON.stringify(value));
-    else sessionStorage.removeItem(doneKey(propertyId));
-  } catch {
-    /* armazenamento bloqueado */
-  }
-}
-
-function readStored(propertyId: string): Stored | null {
-  try {
-    const v = JSON.parse(sessionStorage.getItem(storageKey(propertyId)) ?? "null");
-    if (!v || typeof v.leadId !== "string" || typeof v.token !== "string") return null;
-    return {
-      leadId: v.leadId,
-      token: v.token,
-      name: typeof v.name === "string" ? v.name : "",
-      answers: v.answers && typeof v.answers === "object" ? (v.answers as AnswerMap) : {},
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeStored(propertyId: string, value: Stored | null) {
-  try {
-    if (value) sessionStorage.setItem(storageKey(propertyId), JSON.stringify(value));
-    else sessionStorage.removeItem(storageKey(propertyId));
-  } catch {
-    /* modo privado / armazenamento bloqueado: o fluxo continua sem retomada */
-  }
-}
-
-type ApiResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; status: number; message: string; fieldErrors?: Record<string, string> };
-
-async function postJson<T>(url: string, body: unknown): Promise<ApiResult<T>> {
-  try {
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) return { ok: true, data: data as T };
-    return { ok: false, status: res.status, message: data?.message ?? GENERIC_ERROR, fieldErrors: data?.fieldErrors };
-  } catch {
-    return { ok: false, status: 0, message: OFFLINE_ERROR };
-  }
-}
-
-/** Máscara progressiva: (67) 9999-1234 / (67) 99999-1234. */
-function maskPhone(raw: string) {
-  let d = raw.replace(/\D/g, "");
-  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
-  d = d.slice(0, 11);
-  if (d.length === 0) return "";
-  if (d.length <= 2) return `(${d}`;
-  const ddd = d.slice(0, 2);
-  const rest = d.slice(2);
-  if (rest.length <= 4) return `(${ddd}) ${rest}`;
-  const cut = rest.length === 9 ? 5 : 4;
-  return `(${ddd}) ${rest.slice(0, cut)}-${rest.slice(cut)}`;
-}
-
-const CONTACT_FIELD_IDS: Record<string, string> = { name: "cf-name", phone: "cf-phone", email: "cf-email" };
-/** Campos que ficam na caixinha "mais informações de contato". */
-const EXTRA_CONTACT_FIELDS = ["phone", "email"];
-
-const hasName = (name: string) => name.trim().length >= 2;
-
-/** Validação local (mesmas regras do servidor) — evita gastar o limite de envios do IP com erros de digitação. */
-function validateContact(c: { name: string; phone: string; email: string }): Record<string, string> {
-  const errors: Record<string, string> = {};
-  if (!hasName(c.name)) errors.name = "Informe seu nome";
-  let digits = c.phone.replace(/\D/g, "");
-  if (digits.length > 11 && digits.startsWith("55")) digits = digits.slice(2);
-  if (digits && digits.length !== 10 && digits.length !== 11) errors.phone = "WhatsApp inválido. Use DDD + número";
-  const email = c.email.trim();
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "E-mail inválido";
-  return errors;
-}
-
-/** Fluxo do visitante: nome (contatos extras opcionais) → uma pergunta por tela → encaminhamento ao WhatsApp. */
-export function InterestFlow({ property, questions, consentText }: InterestFlowProps) {
-  const [step, setStep] = useState<Step>({ kind: "contact" });
+/**
+ * Questionário do visitante: uma pergunta por tela → encaminhamento ao WhatsApp. O lead já foi criado
+ * no formulário da página do imóvel (InterestStart) e chega aqui pelo sessionStorage.
+ */
+export function InterestFlow({ property, questions }: InterestFlowProps) {
+  const router = useRouter();
+  const propertyHref = `/imovel/${property.slug}`;
+  const [step, setStep] = useState<Step>({ kind: "loading" });
   const [lead, setLead] = useState<Lead | null>(null);
   const [answers, setAnswers] = useState<AnswerMap>({});
-  const [contact, setContact] = useState({ name: "", phone: "", email: "" });
-  const [showMoreContact, setShowMoreContact] = useState(false);
-  const [contactErrors, setContactErrors] = useState<Record<string, string>>({});
+  const [name, setName] = useState("");
   const [questionErrors, setQuestionErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<{ message: string; retry?: () => void } | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const formRef = useRef<HTMLFormElement>(null);
   const advancing = useRef(false);
   const advanceTimer = useRef<number | null>(null);
   const started = useRef(false);
   const firstStep = useRef(true);
+  const autoSubmit = useRef(false);
 
   const visible = useMemo(() => visibleQuestions(questions, answers), [questions, answers]);
-  const totalSteps = visible.length + 1;
+  const totalSteps = Math.max(visible.length, 1);
 
   // entrada direta, evento de início e retomada após recarregar
   useEffect(() => {
@@ -156,22 +57,29 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     const done = readDone(property.id);
     if (done) {
       setLead({ leadId: done.leadId, token: done.token });
-      setContact((c) => ({ ...c, name: done.name }));
+      setName(done.name);
       setStep({ kind: "done", handoff: done.handoff });
       return;
     }
     const saved = readStored(property.id);
-    if (!saved) return;
+    // sem lead (entrada direta pelo link): o nome é pedido na página do imóvel
+    if (!saved) {
+      router.replace(`${propertyHref}#comecar`);
+      return;
+    }
+    const savedLead = { leadId: saved.leadId, token: saved.token };
     const vis = visibleQuestions(questions, saved.answers);
-    setLead({ leadId: saved.leadId, token: saved.token });
+    setLead(savedLead);
     setAnswers(saved.answers);
-    setContact((c) => ({ ...c, name: saved.name }));
+    setName(saved.name);
     if (vis.length > 0) {
       const pending = vis.findIndex((q) => !isAnswered(q, saved.answers[q.id]));
       setStep({ kind: "question", index: pending === -1 ? vis.length - 1 : pending });
+    } else {
+      autoSubmit.current = true; // imóvel sem perguntas: envia direto (efeito abaixo de submitAnswers)
     }
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [property.id, questions]);
+  }, [property.id, questions, propertyHref, router]);
 
   const stepKey =
     step.kind === "question" ? `q-${visible[step.index]?.id ?? step.index}`
@@ -197,7 +105,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     headingRef.current?.focus();
   }, [stepKey]);
 
-  function persist(nextLead: Lead | null, nextAnswers: AnswerMap, name = contact.name) {
+  function persist(nextLead: Lead | null, nextAnswers: AnswerMap) {
     if (nextLead) writeStored(property.id, { ...nextLead, name, answers: nextAnswers });
   }
 
@@ -205,54 +113,6 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     const vis = visibleQuestions(questions, currentAnswers);
     if (index < vis.length) setStep({ kind: "question", index: Math.max(0, index) });
     else void submitAnswers(currentAnswers, currentLead);
-  }
-
-  function focusFirstContactError(errors: Record<string, string>) {
-    const first = Object.keys(CONTACT_FIELD_IDS).find((k) => errors[k]);
-    if (!first) return false;
-    // o campo pode estar dentro da caixinha fechada: abre antes de focar
-    if (EXTRA_CONTACT_FIELDS.includes(first)) flushSync(() => setShowMoreContact(true));
-    document.getElementById(CONTACT_FIELD_IDS[first])?.focus();
-    return true;
-  }
-
-  async function submitContact(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (busy) return;
-    setError(null);
-    const localErrors = validateContact(contact);
-    if (Object.keys(localErrors).length > 0) {
-      setContactErrors(localErrors);
-      focusFirstContactError(localErrors);
-      return;
-    }
-    setBusy(true);
-    const r = await postJson<Lead>("/api/public/leads", {
-      propertyId: property.id,
-      name: contact.name,
-      phone: contact.phone.trim() || undefined,
-      email: contact.email.trim() || undefined,
-      // o aviso de consentimento fica logo abaixo do botão: continuar é aceitar
-      consent: true,
-      visitorId: getVisitorId(),
-      landingUrl: window.location.href,
-      attribution: getAttribution(),
-    });
-    setBusy(false);
-    if (!r.ok) {
-      if (r.status === 422 && r.fieldErrors) {
-        setContactErrors(r.fieldErrors);
-        if (!focusFirstContactError(r.fieldErrors)) setError({ message: r.fieldErrors._form ?? r.message });
-      } else {
-        setContactErrors({});
-        setError({ message: r.message, retry: () => formRef.current?.requestSubmit() });
-      }
-      return;
-    }
-    setContactErrors({});
-    setLead(r.data);
-    persist(r.data, answers, contact.name);
-    goTo(0, answers, r.data);
   }
 
   async function submitAnswers(currentAnswers: AnswerMap, currentLead: Lead) {
@@ -268,7 +128,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     });
     if (r.ok) {
       writeStored(property.id, null);
-      writeDone(property.id, { ...currentLead, name: contact.name, handoff: r.data });
+      writeDone(property.id, { ...currentLead, name, handoff: r.data });
       setStep({ kind: "done", handoff: r.data });
       return;
     }
@@ -284,14 +144,20 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
       return;
     }
     if (r.status === 404) {
+      // lead não existe mais (ou o imóvel saiu do ar): recomeça pela página do imóvel
       writeStored(property.id, null);
-      setLead(null);
-      setError({ message: "Não foi possível continuar seu contato. Confirme seus dados para tentar de novo." });
-      setStep({ kind: "contact" });
+      router.replace(`${propertyHref}#comecar`);
       return;
     }
     setError({ message: r.message, retry: () => void submitAnswers(currentAnswers, currentLead) });
   }
+
+  useEffect(() => {
+    if (!autoSubmit.current || !lead) return;
+    autoSubmit.current = false;
+    void submitAnswers(answers, lead);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dispara uma vez, quando o lead é restaurado
+  }, [lead]);
 
   function setAnswer(q: PublicQuestion, value: AnswerValue | undefined): AnswerMap {
     const next = { ...answers };
@@ -313,116 +179,31 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     cancelAdvance();
     setError(null);
     if (step.kind === "question") {
-      setStep(step.index === 0 ? { kind: "contact" } : { kind: "question", index: step.index - 1 });
+      if (step.index === 0) router.push(propertyHref);
+      else setStep({ kind: "question", index: step.index - 1 });
     } else if (step.kind === "sending") {
       setStep({ kind: "question", index: Math.max(0, visible.length - 1) });
     }
   }
 
   const progress =
-    step.kind === "contact" ? 1 / totalSteps
-    : step.kind === "question" ? (step.index + 2) / totalSteps
+    step.kind === "loading" ? 0
+    : step.kind === "question" ? (step.index + 1) / totalSteps
     : 1;
   const stepLabel =
-    step.kind === "contact" ? `Etapa 1 de ${totalSteps}`
-    : step.kind === "question" ? `Etapa ${step.index + 2} de ${totalSteps}`
+    step.kind === "loading" ? "Carregando"
+    : step.kind === "question" ? `Pergunta ${step.index + 1} de ${totalSteps}`
     : step.kind === "sending" ? "Enviando respostas"
     : "Tudo pronto";
 
   const headingClass = "font-display text-[1.875rem] leading-[1.15] tracking-[-0.015em] text-balance text-ink outline-none";
 
   let body: ReactNode;
-  if (step.kind === "contact") {
+  if (step.kind === "loading") {
     body = (
-      <>
-        <h1 ref={headingRef} tabIndex={-1} className={headingClass}>
-          Antes de começar, qual é o seu nome?
-        </h1>
-        <div className="mt-3 flex items-center gap-3">
-          {property.agentPhotoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element -- foto do storage (local ou Supabase)
-            <img src={property.agentPhotoUrl} alt="" className="size-9 shrink-0 rounded-full object-cover" />
-          )}
-          <p className="text-[0.9375rem] leading-snug text-ink-muted">
-            Responda algumas perguntas rápidas e fale com {property.agentName} pelo WhatsApp.
-          </p>
-        </div>
-        <form ref={formRef} noValidate onSubmit={submitContact} className="mt-7 flex flex-1 flex-col gap-5">
-          <Field id="cf-name" label="Nome" error={contactErrors.name}>
-            <Input
-              name="name"
-              autoComplete="name"
-              autoCapitalize="words"
-              enterKeyHint="go"
-              maxLength={100}
-              value={contact.name}
-              onChange={(e) => setContact({ ...contact, name: e.target.value })}
-              className="h-12! text-base!"
-            />
-          </Field>
-
-          <div className="rounded-control border border-line">
-            <button
-              type="button"
-              aria-expanded={showMoreContact}
-              aria-controls="cf-more"
-              onClick={() => setShowMoreContact((v) => !v)}
-              className="flex min-h-12 w-full items-center justify-between gap-3 rounded-control px-4 py-3 text-left text-[0.9375rem] font-medium text-ink hover:bg-ink/5"
-            >
-              Quero deixar mais informações de contato
-              <ChevronDown
-                aria-hidden
-                className={cn("size-5 shrink-0 text-ink-muted transition-transform duration-150", showMoreContact && "rotate-180")}
-              />
-            </button>
-            {showMoreContact && (
-              <div id="cf-more" className="flex flex-col gap-5 border-t border-line px-4 pt-4 pb-5">
-                <Field id="cf-phone" label="WhatsApp" optional hint="Com DDD" error={contactErrors.phone}>
-                  <Input
-                    name="phone"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    enterKeyHint="next"
-                    placeholder="(67) 99999-1234"
-                    value={contact.phone}
-                    onChange={(e) => setContact({ ...contact, phone: maskPhone(e.target.value) })}
-                    className="h-12! text-base! tabular-nums"
-                  />
-                </Field>
-                <Field id="cf-email" label="E-mail" optional error={contactErrors.email}>
-                  <Input
-                    name="email"
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    autoCapitalize="none"
-                    enterKeyHint="go"
-                    maxLength={200}
-                    value={contact.email}
-                    onChange={(e) => setContact({ ...contact, email: e.target.value })}
-                    className="h-12! text-base!"
-                  />
-                </Field>
-              </div>
-            )}
-          </div>
-
-          <ErrorBox error={error} />
-          <div className={actionBarClass}>
-            <PrimaryButton type="submit" disabled={busy || !hasName(contact.name)} aria-busy={busy || undefined}>
-              {busy ? <Spinner label="Enviando" /> : null}
-              {busy ? "Enviando…" : "Começar"}
-            </PrimaryButton>
-            <p className="mt-3 text-[0.8125rem] leading-snug text-ink-muted">
-              {consentText}{" "}
-              <a href="/privacidade" target="_blank" rel="noopener" className="font-medium text-brand underline underline-offset-4">
-                Ler a política
-              </a>
-            </p>
-          </div>
-        </form>
-      </>
+      <div className="flex flex-1 items-center justify-center">
+        <Spinner className="size-8 text-brand" label="Carregando" />
+      </div>
     );
   } else if (step.kind === "question") {
     const q = visible[step.index];
@@ -436,7 +217,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
       const qError = questionErrors[q.id];
 
       const next = (current: AnswerMap) => {
-        if (!lead) return setStep({ kind: "contact" });
+        if (!lead) return router.replace(`${propertyHref}#comecar`);
         goTo(step.index + 1, current, lead);
       };
       const onContinue = () => {
@@ -584,7 +365,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     );
   } else {
     const { handoff } = step;
-    const firstName = contact.name.trim().split(/\s+/)[0];
+    const firstName = name.trim().split(/\s+/)[0];
     body = (
       <>
         <span aria-hidden className="grid size-14 place-items-center rounded-full bg-whatsapp/10 text-whatsapp">
@@ -631,7 +412,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
 
         <div className="pt-8">
           <Link
-            href={`/imovel/${property.slug}`}
+            href={propertyHref}
             onClick={() => writeDone(property.id, null)}
             className="inline-flex h-12 w-full items-center justify-center rounded-control text-base font-medium text-ink-muted hover:bg-ink/5 hover:text-ink"
           >
@@ -642,14 +423,14 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     );
   }
 
-  const canGoBack = step.kind === "question" || (step.kind === "sending" && error !== null);
+  const canGoBack = (step.kind === "question" && step.index > 0) || (step.kind === "sending" && error !== null);
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface">
       <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-lg items-center gap-3 px-2 py-2 sm:px-4">
-          {step.kind === "contact" ? (
-            <Link href={`/imovel/${property.slug}`} aria-label="Voltar ao imóvel" className={backButtonClass}>
+          {step.kind === "loading" || (step.kind === "question" && step.index === 0) ? (
+            <Link href={propertyHref} aria-label="Voltar ao imóvel" className={backButtonClass}>
               <ArrowLeft aria-hidden className="size-5" />
             </Link>
           ) : canGoBack ? (

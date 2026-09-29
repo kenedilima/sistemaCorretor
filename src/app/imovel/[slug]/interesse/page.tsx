@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { InterestFlow } from "@/components/publico/InterestFlow";
-import { CONSENT_TEXT } from "@/domain/consent";
 import { getPublicPropertyBySlug } from "@/server/services/properties";
 import { getPublicQuestions } from "@/server/services/public-leads";
 
@@ -25,11 +24,8 @@ export default async function InterestPage({ params }: PageProps<"/imovel/[slug]
         title: p.title,
         slug: p.slug,
         coverUrl: p.images[0]?.url ?? null,
-        agentName: p.agent.name,
-        agentPhotoUrl: p.agent.photoUrl,
       }}
       questions={questions}
-      consentText={CONSENT_TEXT}
     />
   );
 }
