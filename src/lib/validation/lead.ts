@@ -24,14 +24,20 @@ const visitorIdSchema = z
 export const startLeadSchema = z.object({
   propertyId: z.string().min(1).max(50),
   name: z.string().trim().min(2, "Informe seu nome").max(100),
-  phone: z.string().trim().transform((v, ctx) => {
-    const n = normalizeBrPhone(v);
-    if (!n) {
-      ctx.addIssue({ code: "custom", message: "WhatsApp inválido. Use DDD + número" });
-      return z.NEVER;
-    }
-    return n;
-  }),
+  /** Opcional: o visitante chama o corretor pelo WhatsApp de qualquer forma; vazio vira null. */
+  phone: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v, ctx) => {
+      if (!v) return null;
+      const n = normalizeBrPhone(v);
+      if (!n) {
+        ctx.addIssue({ code: "custom", message: "WhatsApp inválido. Use DDD + número" });
+        return z.NEVER;
+      }
+      return n;
+    }),
   email: z
     .string()
     .trim()

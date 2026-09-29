@@ -1,8 +1,8 @@
 "use client";
-import { ArrowLeft, Check, MessageCircle, RotateCcw } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, MessageCircle, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
-import { Checkbox } from "@/components/ui/Checkbox";
+import { flushSync } from "react-dom";
 import { cn } from "@/components/ui/cn";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -106,33 +106,31 @@ function maskPhone(raw: string) {
   return `(${ddd}) ${rest.slice(0, cut)}-${rest.slice(cut)}`;
 }
 
-const CONTACT_FIELD_IDS: Record<string, string> = { name: "cf-name", phone: "cf-phone", email: "cf-email", consent: "cf-consent" };
+const CONTACT_FIELD_IDS: Record<string, string> = { name: "cf-name", phone: "cf-phone", email: "cf-email" };
+/** Campos que ficam na caixinha "mais informações de contato". */
+const EXTRA_CONTACT_FIELDS = ["phone", "email"];
+
+const hasName = (name: string) => name.trim().length >= 2;
 
 /** Validação local (mesmas regras do servidor) — evita gastar o limite de envios do IP com erros de digitação. */
-function validateContact(c: { name: string; phone: string; email: string; consent: boolean }): Record<string, string> {
+function validateContact(c: { name: string; phone: string; email: string }): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (c.name.trim().length < 2) errors.name = "Informe seu nome";
+  if (!hasName(c.name)) errors.name = "Informe seu nome";
   let digits = c.phone.replace(/\D/g, "");
   if (digits.length > 11 && digits.startsWith("55")) digits = digits.slice(2);
-  if (digits.length !== 10 && digits.length !== 11) errors.phone = "WhatsApp inválido. Use DDD + número";
+  if (digits && digits.length !== 10 && digits.length !== 11) errors.phone = "WhatsApp inválido. Use DDD + número";
   const email = c.email.trim();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "E-mail inválido";
-  if (!c.consent) errors.consent = "É preciso concordar para continuar";
   return errors;
 }
 
-function focusFirstContactError(errors: Record<string, string>) {
-  const first = Object.keys(CONTACT_FIELD_IDS).find((k) => errors[k]);
-  if (first) document.getElementById(CONTACT_FIELD_IDS[first])?.focus();
-  return Boolean(first);
-}
-
-/** Fluxo do visitante: contato → uma pergunta por tela → encaminhamento ao WhatsApp. */
+/** Fluxo do visitante: nome (contatos extras opcionais) → uma pergunta por tela → encaminhamento ao WhatsApp. */
 export function InterestFlow({ property, questions, consentText }: InterestFlowProps) {
   const [step, setStep] = useState<Step>({ kind: "contact" });
   const [lead, setLead] = useState<Lead | null>(null);
   const [answers, setAnswers] = useState<AnswerMap>({});
-  const [contact, setContact] = useState({ name: "", phone: "", email: "", consent: false });
+  const [contact, setContact] = useState({ name: "", phone: "", email: "" });
+  const [showMoreContact, setShowMoreContact] = useState(false);
   const [contactErrors, setContactErrors] = useState<Record<string, string>>({});
   const [questionErrors, setQuestionErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<{ message: string; retry?: () => void } | null>(null);
@@ -209,6 +207,15 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     else void submitAnswers(currentAnswers, currentLead);
   }
 
+  function focusFirstContactError(errors: Record<string, string>) {
+    const first = Object.keys(CONTACT_FIELD_IDS).find((k) => errors[k]);
+    if (!first) return false;
+    // o campo pode estar dentro da caixinha fechada: abre antes de focar
+    if (EXTRA_CONTACT_FIELDS.includes(first)) flushSync(() => setShowMoreContact(true));
+    document.getElementById(CONTACT_FIELD_IDS[first])?.focus();
+    return true;
+  }
+
   async function submitContact(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (busy) return;
@@ -223,9 +230,10 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     const r = await postJson<Lead>("/api/public/leads", {
       propertyId: property.id,
       name: contact.name,
-      phone: contact.phone,
+      phone: contact.phone.trim() || undefined,
       email: contact.email.trim() || undefined,
-      consent: contact.consent,
+      // o aviso de consentimento fica logo abaixo do botão: continuar é aceitar
+      consent: true,
       visitorId: getVisitorId(),
       landingUrl: window.location.href,
       attribution: getAttribution(),
@@ -328,7 +336,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
     body = (
       <>
         <h1 ref={headingRef} tabIndex={-1} className={headingClass}>
-          Como o corretor fala com você?
+          Antes de começar, qual é o seu nome?
         </h1>
         <div className="mt-3 flex items-center gap-3">
           {property.agentPhotoUrl && (
@@ -336,7 +344,7 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
             <img src={property.agentPhotoUrl} alt="" className="size-9 shrink-0 rounded-full object-cover" />
           )}
           <p className="text-[0.9375rem] leading-snug text-ink-muted">
-            {property.agentName} recebe suas respostas e continua a conversa pelo WhatsApp.
+            Responda algumas perguntas rápidas e fale com {property.agentName} pelo WhatsApp.
           </p>
         </div>
         <form ref={formRef} noValidate onSubmit={submitContact} className="mt-7 flex flex-1 flex-col gap-5">
@@ -345,64 +353,73 @@ export function InterestFlow({ property, questions, consentText }: InterestFlowP
               name="name"
               autoComplete="name"
               autoCapitalize="words"
-              enterKeyHint="next"
+              enterKeyHint="go"
               maxLength={100}
               value={contact.name}
               onChange={(e) => setContact({ ...contact, name: e.target.value })}
               className="h-12! text-base!"
             />
           </Field>
-          <Field id="cf-phone" label="WhatsApp" hint="Com DDD" error={contactErrors.phone}>
-            <Input
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              enterKeyHint="next"
-              placeholder="(67) 99999-1234"
-              value={contact.phone}
-              onChange={(e) => setContact({ ...contact, phone: maskPhone(e.target.value) })}
-              className="h-12! text-base! tabular-nums"
-            />
-          </Field>
-          <Field id="cf-email" label="E-mail" optional error={contactErrors.email}>
-            <Input
-              name="email"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              autoCapitalize="none"
-              enterKeyHint="done"
-              maxLength={200}
-              value={contact.email}
-              onChange={(e) => setContact({ ...contact, email: e.target.value })}
-              className="h-12! text-base!"
-            />
-          </Field>
-          <Checkbox
-            id="cf-consent"
-            name="consent"
-            checked={contact.consent}
-            onChange={(e) => setContact({ ...contact, consent: e.target.checked })}
-            label={consentText}
-            hint={
-              <a
-                href="/privacidade"
-                target="_blank"
-                rel="noopener"
-                className="inline-flex min-h-12 items-center font-medium text-brand underline underline-offset-4"
-              >
-                Ler a Política de Privacidade
-              </a>
-            }
-            error={contactErrors.consent}
-          />
+
+          <div className="rounded-control border border-line">
+            <button
+              type="button"
+              aria-expanded={showMoreContact}
+              aria-controls="cf-more"
+              onClick={() => setShowMoreContact((v) => !v)}
+              className="flex min-h-12 w-full items-center justify-between gap-3 rounded-control px-4 py-3 text-left text-[0.9375rem] font-medium text-ink hover:bg-ink/5"
+            >
+              Quero deixar mais informações de contato
+              <ChevronDown
+                aria-hidden
+                className={cn("size-5 shrink-0 text-ink-muted transition-transform duration-150", showMoreContact && "rotate-180")}
+              />
+            </button>
+            {showMoreContact && (
+              <div id="cf-more" className="flex flex-col gap-5 border-t border-line px-4 pt-4 pb-5">
+                <Field id="cf-phone" label="WhatsApp" optional hint="Com DDD" error={contactErrors.phone}>
+                  <Input
+                    name="phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    enterKeyHint="next"
+                    placeholder="(67) 99999-1234"
+                    value={contact.phone}
+                    onChange={(e) => setContact({ ...contact, phone: maskPhone(e.target.value) })}
+                    className="h-12! text-base! tabular-nums"
+                  />
+                </Field>
+                <Field id="cf-email" label="E-mail" optional error={contactErrors.email}>
+                  <Input
+                    name="email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    enterKeyHint="go"
+                    maxLength={200}
+                    value={contact.email}
+                    onChange={(e) => setContact({ ...contact, email: e.target.value })}
+                    className="h-12! text-base!"
+                  />
+                </Field>
+              </div>
+            )}
+          </div>
+
           <ErrorBox error={error} />
           <div className={actionBarClass}>
-            <PrimaryButton type="submit" disabled={busy} aria-busy={busy || undefined}>
+            <PrimaryButton type="submit" disabled={busy || !hasName(contact.name)} aria-busy={busy || undefined}>
               {busy ? <Spinner label="Enviando" /> : null}
-              {busy ? "Enviando…" : "Continuar"}
+              {busy ? "Enviando…" : "Começar"}
             </PrimaryButton>
+            <p className="mt-3 text-[0.8125rem] leading-snug text-ink-muted">
+              {consentText}{" "}
+              <a href="/privacidade" target="_blank" rel="noopener" className="font-medium text-brand underline underline-offset-4">
+                Ler a política
+              </a>
+            </p>
           </div>
         </form>
       </>

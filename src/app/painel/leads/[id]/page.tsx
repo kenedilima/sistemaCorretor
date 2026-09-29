@@ -45,10 +45,9 @@ export default async function LeadPage({ params }: PageProps<"/painel/leads/[id]
   const { id } = await params;
   const { user, lead } = await loadLead(id);
   const firstName = lead.name.trim().split(/\s+/)[0];
-  const whatsappUrl = buildWhatsappUrl(
-    lead.phone,
-    `Olá, ${firstName}! Aqui é ${user.name}, sobre o imóvel ${lead.property.title}.`,
-  );
+  const whatsappUrl = lead.phone
+    ? buildWhatsappUrl(lead.phone, `Olá, ${firstName}! Aqui é ${user.name}, sobre o imóvel ${lead.property.title}.`)
+    : null;
   const score = scoreOutOf100(lead.score, lead.maxScore);
   const utms = [
     ["utm_source", lead.utmSource],
@@ -94,23 +93,29 @@ export default async function LeadPage({ params }: PageProps<"/painel/leads/[id]
           </div>
           <LeadStatusSelect leadId={lead.id} status={lead.status} />
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex">
-          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className={buttonStyles({ variant: "whatsapp" })}>
-            <MessageCircle aria-hidden />
-            Abrir WhatsApp
-          </a>
-          <a href={`tel:+${lead.phone}`} className={buttonStyles({ variant: "secondary" })}>
-            <Phone aria-hidden />
-            Ligar
-          </a>
-        </div>
+        {whatsappUrl && (
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className={buttonStyles({ variant: "whatsapp" })}>
+              <MessageCircle aria-hidden />
+              Abrir WhatsApp
+            </a>
+            <a href={`tel:+${lead.phone}`} className={buttonStyles({ variant: "secondary" })}>
+              <Phone aria-hidden />
+              Ligar
+            </a>
+          </div>
+        )}
       </header>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Contato">
           <dl className="-my-2.5 divide-y divide-line">
             <Row label="Telefone">
-              <span className="tabular-nums">{formatBrPhone(lead.phone)}</span>
+              {lead.phone ? (
+                <span className="tabular-nums">{formatBrPhone(lead.phone)}</span>
+              ) : (
+                <span className="text-ink-faint">Não informado</span>
+              )}
             </Row>
             <Row label="E-mail">
               {lead.email ? (

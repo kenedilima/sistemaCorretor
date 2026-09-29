@@ -41,10 +41,11 @@ test("corretor publica imóvel e recebe lead qualificado", async ({ page, browse
   await v.goto(`/imovel/casa-no-jardim-dos-estados?utm_source=instagram&utm_campaign=teste`);
   await expect(v.getByRole("heading", { name: "Casa no Jardim dos Estados" })).toBeVisible();
   await v.getByRole("link", { name: /tenho interesse/i }).first().click();
+  // só o nome é obrigatório: o botão fica desabilitado até preenchê-lo
+  const start = v.getByRole("button", { name: /começar/i });
+  await expect(start).toBeDisabled();
   await v.getByLabel("Nome").fill("João Pereira");
-  await v.getByLabel("WhatsApp").fill("67988887777");
-  await v.getByRole("checkbox").check();
-  await v.getByRole("button", { name: /continuar/i }).click();
+  await start.click();
   // Cada opção avança sozinha (150ms) para a próxima pergunta; esperamos o título de cada uma
   // aparecer antes de clicar, senão dois cliques em sequência podem acertar o mesmo botão "Sim"
   // (perguntas 4 e 5 têm o mesmo rótulo) antes da transição terminar.

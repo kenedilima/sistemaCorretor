@@ -11,7 +11,7 @@ import { formatDateTime, LEAD_STATUS_TONES } from "./lead-status";
 export type LeadRow = {
   id: string;
   name: string;
-  phone: string;
+  phone: string | null;
   score: number;
   maxScore: number;
   classification: Classification;
@@ -82,7 +82,7 @@ export function LeadTable({ leads }: { leads: LeadRow[] }) {
                   >
                     {l.name}
                   </Link>
-                  <span className="block text-xs text-ink-muted tabular-nums">{formatBrPhone(l.phone)}</span>
+                  {l.phone && <span className="block text-xs text-ink-muted tabular-nums">{formatBrPhone(l.phone)}</span>}
                 </td>
                 <td className="max-w-60 px-4 py-3">
                   <span className="line-clamp-2 text-ink-muted">{l.property.title}</span>
@@ -122,7 +122,7 @@ export function LeadTable({ leads }: { leads: LeadRow[] }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-ink">{l.name}</p>
-                    <p className="text-sm text-ink-muted tabular-nums">{formatBrPhone(l.phone)}</p>
+                    {l.phone && <p className="text-sm text-ink-muted tabular-nums">{formatBrPhone(l.phone)}</p>}
                   </div>
                   <Badge tone={LEAD_STATUS_TONES[l.status]} className="shrink-0">
                     {LEAD_STATUS_LABELS[l.status]}

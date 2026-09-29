@@ -219,7 +219,7 @@ model Lead {
   property          Property            @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   publicToken       String              @unique
   name              String
-  phone             String
+  phone             String?
   email             String?
   consentAt         DateTime
   consentText       String

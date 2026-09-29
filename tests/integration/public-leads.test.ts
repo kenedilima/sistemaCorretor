@@ -37,6 +37,15 @@ describe("startLead", () => {
     expect(lead.consentText).toMatch(/Política de Privacidade/);
   });
 
+  it("aceita só o nome: telefone e e-mail são opcionais", async () => {
+    const { property } = await setup();
+    const { leadId } = await startLead(contact(property.id, { phone: undefined }));
+    const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId } });
+    expect(lead).toMatchObject({ name: "João Silva", phone: null, email: null });
+    const again = await startLead(contact(property.id, { phone: "" }));
+    expect(again.leadId).toBe(leadId);
+  });
+
   it("recusa imóvel não publicado, sem consentimento ou telefone inválido", async () => {
     const ctx = await makeAgent();
     const draft = await createProperty(ctx, propertyInput());

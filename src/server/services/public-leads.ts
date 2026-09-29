@@ -48,8 +48,8 @@ export async function startLead(input: unknown, opts: { ownHost?: string } = {})
   const property = await getPublishedProperty(data.propertyId);
   const attribution = resolveAttribution({ ...data.attribution, ownHost: opts.ownHost });
 
-  // Só retoma um lead incompleto do mesmo navegador (mesmo visitorId): quem souber apenas o telefone
-  // de outra pessoa não recebe o token do lead dela nem sobrescreve nome/e-mail.
+  // Só retoma um lead incompleto do mesmo navegador (mesmo visitorId) e mesmo telefone (ou ambos sem):
+  // quem souber apenas o telefone de outra pessoa não recebe o token do lead dela nem sobrescreve nome/e-mail.
   const existing = data.visitorId
     ? await db.lead.findFirst({
         where: {
